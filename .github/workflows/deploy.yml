@@ -32,3 +32,7 @@ jobs:
           . venv/bin/activate
           pip3 install -r requirements.txt
         EOF
+
+    - name: Restart Dash via Supervisor
+      run: |
+        ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'sudo supervisorctl restart dash'
