@@ -23,3 +23,12 @@ jobs:
     - name: Copy files to EC2
       run: |
         rsync -avz -e "ssh -o StrictHostKeyChecking=no -i key.pem" ./ ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/dash-app/
+
+    - name: Create venv on EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} 'bash -s' <<'EOF'
+          cd ~/dash-app
+          python3 -m venv venv
+          . venv/bin/activate
+          pip3 install -r requirements.txt
+        EOF
