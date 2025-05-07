@@ -13,12 +13,11 @@ from dash.dependencies import ALL
 
 
 app = Dash(__name__)
-#app.layout = html.Div(children=['Hello, world!'])
 app.layout = html.Div([
     html.H3("Upload Your Dataset"),
     dcc.Upload(
         id='upload-data',
-        children=html.Div(['Drag and Drop or ', html.A('Select CSV File')]),
+        children=html.Div('Upload File'),
         style={
             'width': '100%', 'height': '60px', 'lineHeight': '60px',
             'borderWidth': '1px', 'borderStyle': 'dashed',
@@ -28,22 +27,34 @@ app.layout = html.Div([
         
         multiple = False
     ),
-    html.H3("Select Target Variable"),
+    html.H3("Select Target: "),
     dcc.Dropdown(id = 'target-dropdown', placeholder='Select a target variable'),
     html.Div(id='selected-target-output'),
     dcc.Store(id='selected-target'),
 
-
+    
     html.Div(id='upload-status'),
     dcc.Store(id='stored-data'),
+    dcc.Store(id='trained-model'),
+
 
     html.H3("Select Categorical Variable"),
     dcc.RadioItems(id='categorical-radio'),
 
-    html.H3("Average Target Value per Category"),
-    dcc.Graph(id = 'category-bar'),
-    html.H3("Correlation with Target Variable"),
-    dcc.Graph(id='correlation-bar'),
+    html.Div([
+        html.Div([
+            html.H3("Average Target Value per Category"),
+            dcc.Graph(id='category-bar')
+        ], style={'width': '50%', 'padding': '0 10px'}),
+
+        html.Div([
+            html.H3("Correlation with Target Variable"),
+            dcc.Graph(id='correlation-bar')
+        ], style={'width': '50%', 'padding': '0 10px'})
+    ], style={'display': 'flex', 'justify-content': 'space-between'}),
+
+
+  
 
     html.H3("Train Model"),
     html.Div(id='feature-checkboxes'),
@@ -181,6 +192,8 @@ def train_model(n_clicks, data, target, features):
         return "", None
     
     df = pd.DataFrame(data)
+    df = df.dropna(subset=[target])  #drop some rows to clean up a bit
+
     X= df[features]
     y = df[target]
 
@@ -252,7 +265,6 @@ def make_prediction(n_clicks, features, data, target, inputs):
     input_dict = dict(zip(features, inputs))
     input_df = pd.DataFrame([input_dict])
 
-    # Pipeline setup (rebuild to match training, could also be global/shared)
     numeric_features = input_df.select_dtypes(include='number').columns.tolist()
     categorical_features = input_df.select_dtypes(include='object').columns.tolist()
 
@@ -269,12 +281,10 @@ def make_prediction(n_clicks, features, data, target, inputs):
         ('regressor', LinearRegression())
     ])
 
-    # Re-train model (you could store and reuse trained model if desired)
     X = df[features]
     y = df[target]
     pipeline.fit(X, y)
 
-    # Predict
     prediction = pipeline.predict(input_df)[0]
     return f"Predicted {target}: {prediction:.2f}"
 
