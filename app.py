@@ -10,6 +10,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
 from dash.dependencies import ALL
+from sklearn.tree import DecisionTreeRegressor
 
 
 app = Dash(__name__)
@@ -212,7 +213,7 @@ def train_model(n_clicks, data, target, features):
 
     pipeline = Pipeline([
         ('preprocessor', preprocessor), 
-        ('regressor', LinearRegression())
+        ('regressor', DecisionTreeRegressor(random_state=0))
     ])
     pipeline.fit(X_train, y_train)
     y_pred = pipeline.predict(X_test)
@@ -278,7 +279,7 @@ def make_prediction(n_clicks, features, data, target, inputs):
 
     pipeline = Pipeline([
         ('preprocessor', preprocessor),
-        ('regressor', LinearRegression())
+        ('regressor', DecisionTreeRegressor(random_state=0))
     ])
 
     X = df[features]
