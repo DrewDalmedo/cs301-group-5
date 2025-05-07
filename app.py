@@ -2,6 +2,15 @@ from dash import Dash, html, dcc, Input, Output, State, callback_context
 import pandas as pd
 import io
 import base64
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score
+from dash.dependencies import ALL
+
 
 app = Dash(__name__)
 #app.layout = html.Div(children=['Hello, world!'])
@@ -34,7 +43,17 @@ app.layout = html.Div([
     html.H3("Average Target Value per Category"),
     dcc.Graph(id = 'category-bar'),
     html.H3("Correlation with Target Variable"),
-    dcc.Graph(id='correlation-bar')
+    dcc.Graph(id='correlation-bar'),
+
+    html.H3("Train Model"),
+    html.Div(id='feature-checkboxes'),
+    html.Button("Train Model", id='train-button', n_clicks=0),
+    html.Div(id='model-output'),
+
+    html.H3("Make a Prediction"),
+    html.Div(id='input-fields'),
+    html.Button("Predict", id='predict-button', n_clicks=0),
+    html.Div(id='prediction-output')
 ])
 
 @app.callback(
@@ -134,5 +153,130 @@ def update_correlation_bar(data, target):
         }],
         'layout': {'title': f'Correlation of Variables with {target}'}
     }
+@app.callback(
+    Output('feature-checkboxes', 'children'),
+    Input('stored-data', 'data'),
+    Input('selected-target', 'data')
+)
+def display_feature_boxes(data, target):
+    if data is None or target is None:
+        return []
+    df = pd.DataFrame(data)
+    feature_options = [col for col in df.columns if col != target]
+    return dcc.Checklist(
+        id='feature-list',
+        options=[{'label': col, 'value': col} for col in feature_options],
+        labelStyle={'display': 'block'}
+    )
+@app.callback(
+    Output('model-output', 'children'),
+    Output('trained-model', 'data'),
+    Input('train-button', 'n_clicks'),
+    State('stored-data', 'data'),
+    State('selected-target', 'data'),
+    State('feature-list', 'value')
+)
+def train_model(n_clicks, data, target, features):
+    if n_clicks == 0 or data is None or target is None or features is None:
+        return "", None
+    
+    df = pd.DataFrame(data)
+    X= df[features]
+    y = df[target]
+
+    X_train, X_test, y_train, y_test = train_test_split(X,y, test_size=0.2)
+
+    numeric_features = X.select_dtypes(include='number').columns.tolist()
+    categorical_features = X.select_dtypes(include='object').columns.tolist()
+
+    preprocessor = ColumnTransformer([
+        ('num', SimpleImputer(strategy = 'mean'), numeric_features),
+        ('cat', Pipeline([
+            ('imputer', SimpleImputer(strategy='most_frequent')),
+            ('encoder', OneHotEncoder(handle_unknown='ignore'))
+        ]), categorical_features)
+    ])
+
+    pipeline = Pipeline([
+        ('preprocessor', preprocessor), 
+        ('regressor', LinearRegression())
+    ])
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    r2 = r2_score(y_test, y_pred)
+
+    return f"Model trained! R² score: {r2:.4f}", None
+
+@app.callback(
+    Output('input-fields', 'children'),
+    Input('feature-list', 'value'),
+    State('stored-data', 'data')
+)
+
+def generate_input_fields(features, data):
+    if features is None or data is None:
+        return []
+    
+    df = pd.DataFrame(data)
+    inputs = []
+
+    for feature in features:
+        if df[feature].dtype == 'object':
+            unique_vals = df[feature].dropna().unique().tolist()
+            inputs.append(html.Div([
+                html.Label(f"{feature}:"),
+                dcc.Dropdown(id={'type': 'predict-input', 'index': feature},
+                             options=[{'label': val, 'value': val} for val in unique_vals],
+                             placeholder=f"Select a value")
+            ]))
+        else:
+            inputs.append(html.Div([
+                html.Label(f"{feature}:"),
+                dcc.Input(id={'type': 'predict-input', 'index': feature}, type='number')
+            ]))
+    return inputs
+
+@app.callback(
+    Output('prediction-output', 'children'),
+    Input('predict-button', 'n_clicks'),
+    State('feature-list', 'value'),
+    State('stored-data', 'data'),
+    State('selected-target', 'data'),
+    State({'type': 'predict-input', 'index': ALL}, 'value')
+)
+def make_prediction(n_clicks, features, data, target, inputs):
+    if n_clicks == 0 or not features or not data or not target or not inputs:
+        return ""
+
+    df = pd.DataFrame(data)
+    input_dict = dict(zip(features, inputs))
+    input_df = pd.DataFrame([input_dict])
+
+    # Pipeline setup (rebuild to match training, could also be global/shared)
+    numeric_features = input_df.select_dtypes(include='number').columns.tolist()
+    categorical_features = input_df.select_dtypes(include='object').columns.tolist()
+
+    preprocessor = ColumnTransformer([
+        ('num', SimpleImputer(strategy='mean'), numeric_features),
+        ('cat', Pipeline([
+            ('imputer', SimpleImputer(strategy='most_frequent')),
+            ('encoder', OneHotEncoder(handle_unknown='ignore'))
+        ]), categorical_features)
+    ])
+
+    pipeline = Pipeline([
+        ('preprocessor', preprocessor),
+        ('regressor', LinearRegression())
+    ])
+
+    # Re-train model (you could store and reuse trained model if desired)
+    X = df[features]
+    y = df[target]
+    pipeline.fit(X, y)
+
+    # Predict
+    prediction = pipeline.predict(input_df)[0]
+    return f"Predicted {target}: {prediction:.2f}"
+
 if __name__ == '__main__':
     app.run(debug=False)
