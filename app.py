@@ -13,6 +13,8 @@ from dash.dependencies import ALL
 from sklearn.tree import DecisionTreeRegressor
 
 
+MODEL_PIPELINE = None
+
 app = Dash(__name__)
 app.layout = html.Div([
     html.H3("Upload Your Dataset"),
@@ -215,7 +217,9 @@ def train_model(n_clicks, data, target, features):
         ('preprocessor', preprocessor), 
         ('regressor', DecisionTreeRegressor(random_state=0))
     ])
+    global MODEL_PIPELINE
     pipeline.fit(X_train, y_train)
+    MODEL_PIPELINE = pipeline
     y_pred = pipeline.predict(X_test)
     r2 = r2_score(y_test, y_pred)
 
@@ -261,8 +265,11 @@ def generate_input_fields(features, data):
 def make_prediction(n_clicks, features, data, target, inputs):
     if n_clicks == 0 or not features or not data or not target or not inputs:
         return ""
+    if MODEL_PIPELINE is None:
+        return "You need to train the model first!"
 
     df = pd.DataFrame(data)
+    df = df.dropna(subset=[target])
     input_dict = dict(zip(features, inputs))
     input_df = pd.DataFrame([input_dict])
 
@@ -284,10 +291,10 @@ def make_prediction(n_clicks, features, data, target, inputs):
 
     X = df[features]
     y = df[target]
-    pipeline.fit(X, y)
+    
 
-    prediction = pipeline.predict(input_df)[0]
-    return f"Predicted {target}: {prediction:.2f}"
+    pred = MODEL_PIPELINE.predict(input_df)[0]
+    return f"Predicted {target}: {pred:.2f}"
 
 if __name__ == '__main__':
     app.run(debug=False)
